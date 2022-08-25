@@ -1,0 +1,132 @@
+---
+title: "MA331-Coursework"
+subtitle: "Text analytics of the TED talks by Saul Griffith and Jonathan Drori"
+author: "Raakhi-Rachel Jose"
+output : 
+  html_document:
+    fig_width: 4
+    fig_height: 4
+    fig_caption: true
+    theme: united
+    highlight: tango
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)  
+
+# Extend the list below to load all the packages required for your analyses here:
+#===============================================================================
+library(prettydoc)
+library(dsEssex)
+library(tidyverse)
+library(tidytext)
+library(ggrepel)
+
+# load the 'ted_talks' data
+#=========================
+data(ted_talks)
+#filtering and loading data for my 2 speakers - Saul Griffith and Jonathan Drori
+MyData <- ted_talks %>%
+  filter(speaker %in% c("Saul Griffith", "Jonathan Drori"))
+MyData
+
+```
+
+## Introduction
+
+Technology, Entertainment, and Design(TED) is a media organization which comes works with the motto of sending spreading worthy ideas. And it mainly works by organizing conferences where people having great ideas presents them and motivates people. This project aims at presenting and analyzing the word frequencies and sentiments of TED two speakers namely - Saul Griffith and Jonathan Drori. Even though they have given many speeches, we focus on some specific speeches only. I am analyzing 2 speeches by Saul Griffith which are 'Everyday inventions'(2006), 'High-altitude wind energy from kites!'(2009), and 3 speeches by Jonathan Drori including 'What we think we know(2007), 'Why we're storing billions of seeds'(2009),' Every pollen grain has a story'(2010). Saul and Jonathan have given speeches in different fields, but here we are trying to compare the two speeches and analyze both of them to understand their emotional approach of both of them.
+
+## Methods
+
+In this project, we have used text mining techniques and sentimental analysis mainly.
+
+## 1)Text Mining Techniques
+
+
+First the whole speech is broken done into single meaningful words called tokens, then the words which don't make much sense is ignored by neglected the stopwords including 'a','is','are','the' etc. Later the word count of both the speakers are analysed and visualized via graphical representation.
+
+```{r,echo = FALSE}
+# Making the whole set into simple broken words called tokens
+tidy_talks <- MyData %>% 
+  tidytext::unnest_tokens(word, text)
+#Neglecting stopwords - This is to neglect the non-meaningful words like 'a', 'the' etc
+ted_talks_nonstop <- tidy_talks %>%
+  dplyr::anti_join(get_stopwords()) 
+
+#Getting the  more frequently used words of Saul Griffith
+Griffith_words <- ted_talks_nonstop %>%
+  dplyr::filter(speaker == "Saul Griffith") %>% # filtering the data of Saul griffith alone.
+  dplyr::count(speaker, word, sort = TRUE) # used to count and sort the words of Saul Griffith
+
+Griffith_words %>%
+  dplyr::slice_max(n, n = 30) %>% #Here we are taking the maximum of 30 frequently occuring words
+  dplyr::mutate(word = reorder(word, n)) %>% #Used to maintain order by converting character to factors
+  ggplot2::ggplot(aes(n, word)) + ggplot2::geom_col()+ggtitle("Frequent words of Saul Griffith") # plots graph using the n and word
+
+#Similarly the same word count check is done for Jonathan Drori.
+Drori_words <- ted_talks_nonstop %>%
+  dplyr::filter(speaker == "Jonathan Drori") %>% 
+  dplyr::count(speaker, word, sort = TRUE)
+
+Drori_words %>%
+  dplyr::slice_max(n, n = 30) %>%
+  dplyr::mutate(word = reorder(word, n)) %>%
+  ggplot2::ggplot(aes(n, word)) + ggplot2::geom_col() + ggtitle("Frequent words of Jonathan Drori")
+
+Freq<-dplyr::bind_rows(Griffith_words, Drori_words) %>%
+  group_by(word) %>%
+  filter(sum(n) > 10) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0) %>%
+  ggplot(aes(`Saul Griffith`, `Jonathan Drori`)) +
+  geom_abline(color = "black", size = 1.2, alpha = 0.75, lty = 3) +
+  geom_text_repel(aes(label = word), max.overlaps = 150000) + ggtitle("Frequent words of the 2 speakers")+
+  coord_fixed()
+```
+
+## 2)Sentiment Analysis
+
+The main aim of this project is to compare and analyse the sentiments and emotions expressed by both the speakers. Here I have visualized the emotions of both the speakers. 
+
+
+```{r,echo = FALSE}
+
+svtable <-tidy_talks %>%
+  inner_join(get_sentiments("nrc"), by = "word") %>% #get_sentiments is a function from lexicon package and trying to inner join the 'nrc' dataset with my tidy_talks
+  count(speaker, sentiment) %>% #sums up each sentiments expressed by each speaker
+  pivot_wider(names_from = speaker, values_from = n, values_fill = 0)
+svtable
+sentiment_visual<-tidy_talks %>%
+  inner_join(get_sentiments("nrc"), by = "word") %>% #get_sentiments is a function from lexicon package and trying to inner join the 'nrc' dataset with my tidy_talks
+  count(speaker, sentiment) %>% #sums up each sentiments expressed by each speaker
+  pivot_wider(names_from = speaker, values_from = n, values_fill = 0)%>% #changes the format of the table
+  mutate(OR = dsEssex::compute_OR(`Saul Griffith`, `Jonathan Drori`, correction = FALSE), #computing OR
+         log_OR = log(OR), sentiment = reorder(sentiment, log_OR)) %>% #log OR is being used for reordering. 
+  ggplot(aes(sentiment, log_OR, fill = log_OR < 0)) +
+  geom_col(show.legend = FALSE) + #legend is not included
+  ylab("Log odds ratio") + ggtitle("Sentiment analysis of two speakers") + #y label and title of graph
+  coord_flip() + # flipping x and y axis to get an organised data
+  theme(plot.background = element_rect(fill = "pink", colour = "grey50", size = 1)) + #theme
+  scale_fill_manual(name = "", values = c("lightgreen", "red"))
+
+sentiment_visual
+```
+
+
+## Results
+
+By the analysis of the two speakers- Saul and Jonathan, Jonathan's anger is more in his talks, but surprisingly joy and surprise elements are also there in a good proportion which shows his mixed emotions. A small amount of anticipation and fear is also being expressed by Jonathan in his speeches. On the other hand, Saul Griffth's emotions are more complicated, sadness being the most expressed emotion, but it has a very marginal difference with positivity and trust. Hence, we can't totally analyse the speech to be in sad nature. Or positivity can't also take the first place. He also expresses minimal amount of negativity and disgust. 
+
+```{r,echo = FALSE}
+  plot(sentiment_visual)
+```
+```{r,echo = FALSE}
+  plot(Freq)
+```  
+
+The frequently used words by both speakers is now. So, it depicts the speakers are talking about present scenarios. The other commonly used words include world, get ,say etc Which portrays the enthusiasm of both the speakers to help the world's betterment.
+
+## Discussion
+
+In interpreting the data, I had an issue analyzing the emotions of Saul Griffith where mixed emotions were arising which is a clear challenge for it. There is a lack of data, which  is another drawback of the same. Similarly in Jonathan's speech, anger, joy and surprise  are the highly expressed emotions but then anger is dominating emotion, hence we can conclude the core emotion of the speech is anger. If we have used advanced data mining techniques like correlation we could have end up in more meaningful conclusions.
